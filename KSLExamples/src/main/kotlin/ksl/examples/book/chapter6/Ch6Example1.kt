@@ -25,11 +25,8 @@ import ksl.modeling.variable.*
 import ksl.simulation.KSLEvent
 import ksl.simulation.Model
 import ksl.simulation.ModelElement
-import ksl.utilities.io.asMarkDownTable
-import ksl.utilities.io.dbutil.KSLDatabaseObserver
 import ksl.utilities.random.RandomIfc
 import ksl.utilities.random.rvariable.ExponentialRV
-import org.jetbrains.kotlinx.dataframe.io.toStandaloneHTML
 
 /**
  *  Example 6.1
@@ -38,7 +35,7 @@ import org.jetbrains.kotlinx.dataframe.io.toStandaloneHTML
  *  is exactly as previously demonstrated. However, the model is different because it implements
  *  the customer's process within a coroutine.
  */
-fun main(){
+fun main() {
     val m = Model()
     val dtp = DriveThroughPharmacy(m, name = "DriveThrough")
     dtp.arrivalRV.initialRandomSource = ExponentialRV(6.0, 1)

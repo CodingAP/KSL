@@ -24,6 +24,7 @@ import ksl.modeling.queue.QueueCIfc
 import ksl.modeling.station.SResource
 import ksl.modeling.station.SResourceCIfc
 import ksl.modeling.variable.*
+import ksl.observers.AnimationManager
 import ksl.simulation.KSLEvent
 import ksl.simulation.Model
 import ksl.simulation.ModelElement
@@ -33,15 +34,17 @@ import ksl.utilities.statistic.HistogramIfc
 
 fun main() {
     val model = Model("Drive Through Pharmacy")
+    val animation = AnimationManager(model, 0)
     model.numberOfReplications = 30
     model.lengthOfReplication = 20000.0
     model.lengthOfReplicationWarmUp = 5000.0
     // add the model element to the main model
-    val dtp = DriveThroughPharmacyWithResource(model, 1, name = "Pharmacy")
+    val dtp = DriveThroughPharmacyWithResource(model, animation, 1, name = "Pharmacy")
     dtp.arrivalRV.initialRandomSource = ExponentialRV(6.0, 1)
     dtp.serviceRV.initialRandomSource = ExponentialRV(3.0, 2)
     model.simulate()
     model.print()
+    animation.printToFile("test.log")
 //    val hp = dtp.systemTimeHistogram.histogramPlot()
 //    hp.showInBrowser("System Time Histogram")
 }
@@ -58,6 +61,7 @@ fun main() {
  */
 class DriveThroughPharmacyWithResource(
     parent: ModelElement,
+    animation: AnimationManager,
     numServers: Int = 1,
     ad: RandomIfc = ExponentialRV(1.0, 1),
     sd: RandomIfc = ExponentialRV(0.5, 2),
@@ -68,6 +72,8 @@ class DriveThroughPharmacyWithResource(
     private val myPharmacists: SResource = SResource(this, numServers, "${this.name}:Pharmacists")
     val resource: SResourceCIfc
         get() = myPharmacists
+
+    private val myAnimation = animation;
 
     private var myServiceRV: RandomVariable = RandomVariable(this, sd)
     val serviceRV: RandomSourceCIfc
@@ -110,10 +116,16 @@ class DriveThroughPharmacyWithResource(
         myNS.increment() // new customer arrived
         myInQ.value = myWaitingQ.numInQ.value.toInt()
         val arrivingCustomer = QObject()
+        myAnimation.addToLog("${generator.time}: SPAWN \"customer\" AS \"${arrivingCustomer.name}\"")
         myWaitingQ.enqueue(arrivingCustomer) // enqueue the newly arriving customer
+        myAnimation.addToLog("${generator.time}: QUEUE \"${myWaitingQ.name}\" JOIN \"${arrivingCustomer.name}\"")
         if (myPharmacists.hasAvailableUnits) {
             myPharmacists.seize()
+            myAnimation.addToLog("${generator.time}: RESOURCE \"pharmacist\" SET STATE \"active\"")
             val customer: QObject? = myWaitingQ.removeNext() //remove the next customer
+            if (customer != null) {
+                myAnimation.addToLog("${generator.time}: QUEUE \"${myWaitingQ.name}\" LEAVE \"${customer.name}\"")
+            }
             // schedule end of service, include the customer as the event's message
             schedule(endServiceEvent, myServiceRV, customer)
         }
@@ -121,9 +133,14 @@ class DriveThroughPharmacyWithResource(
 
     private fun endOfService(event: KSLEvent<QObject>) {
         myPharmacists.release()
+        myAnimation.addToLog("${event.time}: RESOURCE \"pharmacist\" SET STATE \"idle\"")
         if (!myWaitingQ.isEmpty) { // queue is not empty
             myPharmacists.seize()
+            myAnimation.addToLog("${event.time}: RESOURCE \"pharmacist\" SET STATE \"active\"")
             val customer: QObject? = myWaitingQ.removeNext() //remove the next customer
+            if (customer != null) {
+                myAnimation.addToLog("${event.time}: QUEUE \"${myWaitingQ.name}\" LEAVE \"${customer.name}\"")
+            }
             // schedule end of service
             schedule(endServiceEvent, myServiceRV, customer)
         }
