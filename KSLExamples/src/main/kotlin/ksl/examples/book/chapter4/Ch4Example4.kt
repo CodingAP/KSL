@@ -18,7 +18,6 @@
 
 package ksl.examples.book.chapter4
 
-import ksl.observers.AnimationManager
 import ksl.simulation.Model
 import ksl.utilities.random.rvariable.ExponentialRV
 

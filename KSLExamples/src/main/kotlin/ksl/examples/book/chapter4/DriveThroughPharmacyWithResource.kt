@@ -18,13 +18,12 @@
 package ksl.examples.book.chapter4
 
 import ksl.modeling.elements.EventGenerator
-import ksl.modeling.elements.GeneratorActionIfc
 import ksl.modeling.queue.Queue
 import ksl.modeling.queue.QueueCIfc
 import ksl.modeling.station.SResource
 import ksl.modeling.station.SResourceCIfc
 import ksl.modeling.variable.*
-import ksl.observers.AnimationManager
+import ksl.observers.animation.AnimationManager
 import ksl.simulation.KSLEvent
 import ksl.simulation.Model
 import ksl.simulation.ModelElement
@@ -39,12 +38,12 @@ fun main() {
     model.lengthOfReplication = 20000.0
     model.lengthOfReplicationWarmUp = 5000.0
     // add the model element to the main model
-    val dtp = DriveThroughPharmacyWithResource(model, animation, 1, name = "Pharmacy")
+    val dtp = DriveThroughPharmacyWithResource(model, animation, 3, name = "Pharmacy")
     dtp.arrivalRV.initialRandomSource = ExponentialRV(6.0, 1)
     dtp.serviceRV.initialRandomSource = ExponentialRV(3.0, 2)
     model.simulate()
     model.print()
-    animation.printToFile("test.log")
+    animation.saveAnimation("animation.zip")
 //    val hp = dtp.systemTimeHistogram.histogramPlot()
 //    hp.showInBrowser("System Time Histogram")
 }
@@ -112,20 +111,21 @@ class DriveThroughPharmacyWithResource(
     private val myArrivalGenerator: EventGenerator = EventGenerator(
         this, this::arrival, myArrivalRV, myArrivalRV)
 
+    private val customerObject = AnimationManager.ObjectType("customer")
+
     private fun arrival(generator: EventGenerator) {
         myNS.increment() // new customer arrived
         myInQ.value = myWaitingQ.numInQ.value.toInt()
         val arrivingCustomer = QObject()
-        myAnimation.addToLog("${generator.time}: SPAWN \"customer\" AS \"${arrivingCustomer.name}\"")
         myWaitingQ.enqueue(arrivingCustomer) // enqueue the newly arriving customer
-        myAnimation.addToLog("${generator.time}: QUEUE \"${myWaitingQ.name}\" JOIN \"${arrivingCustomer.name}\"")
+
+        myAnimation.addObject(generator.time, customerObject, arrivingCustomer)
+        myAnimation.joinQueue(generator.time, myWaitingQ, arrivingCustomer)
         if (myPharmacists.hasAvailableUnits) {
             myPharmacists.seize()
-            myAnimation.addToLog("${generator.time}: RESOURCE \"pharmacist\" SET STATE \"active\"")
+            myAnimation.setResourceState(generator.time, myPharmacists, "busy_${myPharmacists.numBusyUnits.value.toInt()}")
             val customer: QObject? = myWaitingQ.removeNext() //remove the next customer
-            if (customer != null) {
-                myAnimation.addToLog("${generator.time}: QUEUE \"${myWaitingQ.name}\" LEAVE \"${customer.name}\"")
-            }
+            if (customer != null) myAnimation.leaveQueue(generator.time, myWaitingQ, arrivingCustomer)
             // schedule end of service, include the customer as the event's message
             schedule(endServiceEvent, myServiceRV, customer)
         }
@@ -133,17 +133,20 @@ class DriveThroughPharmacyWithResource(
 
     private fun endOfService(event: KSLEvent<QObject>) {
         myPharmacists.release()
-        myAnimation.addToLog("${event.time}: RESOURCE \"pharmacist\" SET STATE \"idle\"")
+
+        if (myPharmacists.isIdle) myAnimation.setResourceState(event.time, myPharmacists, "idle")
+        else myAnimation.setResourceState(event.time, myPharmacists, "busy_${myPharmacists.numBusyUnits.value.toInt()}")
+
         if (!myWaitingQ.isEmpty) { // queue is not empty
             myPharmacists.seize()
-            myAnimation.addToLog("${event.time}: RESOURCE \"pharmacist\" SET STATE \"active\"")
-            val customer: QObject? = myWaitingQ.removeNext() //remove the next customer
-            if (customer != null) {
-                myAnimation.addToLog("${event.time}: QUEUE \"${myWaitingQ.name}\" LEAVE \"${customer.name}\"")
-            }
-            // schedule end of service
+            myAnimation.setResourceState(event.time, myPharmacists, "busy_${myPharmacists.numBusyUnits.value.toInt()}")
+            val customer: QObject? = myWaitingQ.removeNext() // remove the next customer
+            if (customer != null) myAnimation.leaveQueue(event.time, myWaitingQ, customer)
+            // schedule end of service, include the customer as the event's message
             schedule(endServiceEvent, myServiceRV, customer)
         }
+
+        myAnimation.removeObject(event.time, event.message!!)
         departSystem(event.message!!)
     }
 
