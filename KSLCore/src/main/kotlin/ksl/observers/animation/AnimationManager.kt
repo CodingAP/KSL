@@ -14,9 +14,7 @@ import java.io.FileOutputStream
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 
-class AnimationManager(model: Model, replicationId: Int, autoAttach: Boolean = true) {
-    private val myModel: Model = model
-    private val myReplicationId: Int = replicationId;
+class AnimationManager(private val myModel: Model, private val myReplicationId: Int = 0, private val startTime: Double = 0.0, private val endTime: Double = 1000000.0, autoAttach: Boolean = true) {
     private val modelObserver: ModelObserver = ModelObserver()
     private var currentReplication = 0
     private var shouldLog = false
@@ -48,38 +46,42 @@ class AnimationManager(model: Model, replicationId: Int, autoAttach: Boolean = t
         }
     }
 
-    private fun addLog(log: String) {
-        if (shouldLog) {
-            logs.add(log)
+    private fun addLog(log: String, time: Double) {
+        if (shouldLog && time in startTime..endTime) {
+            logs.add("$time: $log")
         }
     }
 
     fun addObject(time: Double, objectType: ObjectType, kslObject: ModelElement.QObject) {
-        addLog("$time: OBJECT ADD \"${objectType.id}\" AS \"${kslObject.name}\"")
+        addLog("OBJECT ADD \"${objectType.id}\" AS \"${kslObject.name}\"", time)
     }
 
     fun removeObject(time: Double, kslObject: ModelElement.QObject) {
-        addLog("$time: OBJECT REMOVE \"${kslObject.name}\"")
+        addLog("OBJECT REMOVE \"${kslObject.name}\"", time)
     }
 
     fun <T : ModelElement.QObject> joinQueue(time: Double, queue: Queue<T>, kslObject: ModelElement.QObject) {
         addModelObject(queue.name, "queue")
-        addLog("$time: QUEUE \"${queue.name}\" JOIN \"${kslObject.name}\"")
+        addLog("QUEUE \"${queue.name}\" JOIN \"${kslObject.name}\"", time)
     }
 
     fun <T : ModelElement.QObject> leaveQueue(time: Double, queue: Queue<T>, kslObject: ModelElement.QObject) {
         addModelObject(queue.name, "queue")
-        addLog("$time: QUEUE \"${queue.name}\" LEAVE \"${kslObject.name}\"")
+        addLog("QUEUE \"${queue.name}\" LEAVE \"${kslObject.name}\"", time)
     }
 
     fun setResourceState(time: Double, resource: SResource, newState: String) {
         addModelObject(resource.name, "resource")
-        addLog("$time: RESOURCE \"${resource.name}\" SET STATE \"$newState\"")
+        addLog("RESOURCE \"${resource.name}\" SET STATE \"$newState\"", time)
     }
 
     fun setResourceState(time: Double, resource: Resource, newState: String) {
         addModelObject(resource.name, "resource")
-        addLog("$time: RESOURCE \"${resource.name}\" SET STATE \"$newState\"")
+        addLog("RESOURCE \"${resource.name}\" SET STATE \"$newState\"", time)
+    }
+
+    fun moveObject(time: Double, kslObject: ModelElement.QObject, startStation: Station, endStation: Station, movementFunction: String = "LINEAR") {
+        addLog("MOVE \"${kslObject.name}\" FROM \"${startStation.id}\" TO \"${endStation.id}\" AS $movementFunction", time)
     }
 
     fun saveAnimation(filename: String, setupOnly: Boolean = false) {
@@ -89,6 +91,9 @@ class AnimationManager(model: Model, replicationId: Int, autoAttach: Boolean = t
         )
 
         val setupJson = Json.encodeToString(animationData)
+
+        logs.add(0, "$startTime: START")
+        logs.add(logs.size - 1, "$endTime: STOP")
         val logData = logs.joinToString("\n")
 
         FileOutputStream(filename).use { fos ->
@@ -130,6 +135,12 @@ class AnimationManager(model: Model, replicationId: Int, autoAttach: Boolean = t
     data class ObjectType(val id: String) {
         init {
             addModelObject(id, "object_type")
+        }
+    }
+
+    data class Station(val id: String) {
+        init {
+            addModelObject(id, "station")
         }
     }
 }

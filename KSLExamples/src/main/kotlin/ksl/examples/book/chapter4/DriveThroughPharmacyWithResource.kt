@@ -33,12 +33,12 @@ import ksl.utilities.statistic.HistogramIfc
 
 fun main() {
     val model = Model("Drive Through Pharmacy")
-    val animation = AnimationManager(model, 0)
+    val animation = AnimationManager(model, 0, 1000.0, 3000.0)
     model.numberOfReplications = 30
     model.lengthOfReplication = 20000.0
     model.lengthOfReplicationWarmUp = 5000.0
     // add the model element to the main model
-    val dtp = DriveThroughPharmacyWithResource(model, animation, 3, name = "Pharmacy")
+    val dtp = DriveThroughPharmacyWithResource(model, animation, 1, name = "Pharmacy")
     dtp.arrivalRV.initialRandomSource = ExponentialRV(6.0, 1)
     dtp.serviceRV.initialRandomSource = ExponentialRV(3.0, 2)
     model.simulate()
@@ -112,6 +112,8 @@ class DriveThroughPharmacyWithResource(
         this, this::arrival, myArrivalRV, myArrivalRV)
 
     private val customerObject = AnimationManager.ObjectType("customer")
+    private val customerSpawn = AnimationManager.Station("customer_spawn")
+    private val pharmacistStation = AnimationManager.Station("pharmacist_station")
 
     private fun arrival(generator: EventGenerator) {
         myNS.increment() // new customer arrived
@@ -123,9 +125,12 @@ class DriveThroughPharmacyWithResource(
         myAnimation.joinQueue(generator.time, myWaitingQ, arrivingCustomer)
         if (myPharmacists.hasAvailableUnits) {
             myPharmacists.seize()
-            myAnimation.setResourceState(generator.time, myPharmacists, "busy_${myPharmacists.numBusyUnits.value.toInt()}")
+            myAnimation.setResourceState(generator.time, myPharmacists, "active")
             val customer: QObject? = myWaitingQ.removeNext() //remove the next customer
-            if (customer != null) myAnimation.leaveQueue(generator.time, myWaitingQ, arrivingCustomer)
+            if (customer != null) {
+                myAnimation.leaveQueue(generator.time, myWaitingQ, arrivingCustomer)
+                myAnimation.moveObject(generator.time, arrivingCustomer, customerSpawn, pharmacistStation, "INSTANT")
+            }
             // schedule end of service, include the customer as the event's message
             schedule(endServiceEvent, myServiceRV, customer)
         }
@@ -135,13 +140,16 @@ class DriveThroughPharmacyWithResource(
         myPharmacists.release()
 
         if (myPharmacists.isIdle) myAnimation.setResourceState(event.time, myPharmacists, "idle")
-        else myAnimation.setResourceState(event.time, myPharmacists, "busy_${myPharmacists.numBusyUnits.value.toInt()}")
+        else myAnimation.setResourceState(event.time, myPharmacists, "active")
 
         if (!myWaitingQ.isEmpty) { // queue is not empty
             myPharmacists.seize()
-            myAnimation.setResourceState(event.time, myPharmacists, "busy_${myPharmacists.numBusyUnits.value.toInt()}")
+            myAnimation.setResourceState(event.time, myPharmacists, "active")
             val customer: QObject? = myWaitingQ.removeNext() // remove the next customer
-            if (customer != null) myAnimation.leaveQueue(event.time, myWaitingQ, customer)
+            if (customer != null) {
+                myAnimation.leaveQueue(event.time, myWaitingQ, customer)
+                myAnimation.moveObject(event.time, customer, customerSpawn, pharmacistStation, "INSTANT")
+            }
             // schedule end of service, include the customer as the event's message
             schedule(endServiceEvent, myServiceRV, customer)
         }
