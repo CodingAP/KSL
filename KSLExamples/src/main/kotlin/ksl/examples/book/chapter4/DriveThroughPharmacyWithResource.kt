@@ -33,7 +33,7 @@ import ksl.utilities.statistic.HistogramIfc
 
 fun main() {
     val model = Model("Drive Through Pharmacy")
-    val animation = AnimationManager(model, 0, 1000.0, 3000.0)
+    val animation = AnimationManager(model, 0, 0.0, 3000.0)
     model.numberOfReplications = 30
     model.lengthOfReplication = 20000.0
     model.lengthOfReplicationWarmUp = 5000.0
@@ -130,6 +130,7 @@ class DriveThroughPharmacyWithResource(
             if (customer != null) {
                 myAnimation.leaveQueue(generator.time, myWaitingQ, arrivingCustomer)
                 myAnimation.moveObject(generator.time, arrivingCustomer, customerSpawn, pharmacistStation, "INSTANT")
+                myAnimation.setVariable(generator.time, myNumCustomers)
             }
             // schedule end of service, include the customer as the event's message
             schedule(endServiceEvent, myServiceRV, customer)
@@ -149,6 +150,7 @@ class DriveThroughPharmacyWithResource(
             if (customer != null) {
                 myAnimation.leaveQueue(event.time, myWaitingQ, customer)
                 myAnimation.moveObject(event.time, customer, customerSpawn, pharmacistStation, "INSTANT")
+                myAnimation.setVariable(event.time, myNumCustomers)
             }
             // schedule end of service, include the customer as the event's message
             schedule(endServiceEvent, myServiceRV, customer)

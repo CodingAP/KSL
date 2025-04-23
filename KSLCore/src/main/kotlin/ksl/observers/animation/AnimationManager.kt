@@ -7,6 +7,7 @@ import kotlinx.serialization.modules.SerializersModule
 import ksl.modeling.entity.Resource
 import ksl.modeling.queue.Queue
 import ksl.modeling.station.SResource
+import ksl.modeling.variable.ResponseIfc
 import ksl.observers.ModelElementObserver
 import ksl.simulation.Model
 import ksl.simulation.ModelElement
@@ -82,6 +83,11 @@ class AnimationManager(private val myModel: Model, private val myReplicationId: 
 
     fun moveObject(time: Double, kslObject: ModelElement.QObject, startStation: Station, endStation: Station, movementFunction: String = "LINEAR") {
         addLog("MOVE \"${kslObject.name}\" FROM \"${startStation.id}\" TO \"${endStation.id}\" AS $movementFunction", time)
+    }
+
+    fun setVariable(time: Double, variable: ResponseIfc) {
+        addModelObject(variable.name, "variable")
+        addLog("VARIABLE \"${variable.name}\" SET \"${variable.value}\"", time)
     }
 
     fun saveAnimation(filename: String, setupOnly: Boolean = false) {
